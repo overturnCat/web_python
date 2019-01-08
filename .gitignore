@@ -1,6 +1,6 @@
 *.py[cod]
 *test*
-# log/
+log/*
 www-*/
 !www-19-01-06_16.26.18/
 test.db
