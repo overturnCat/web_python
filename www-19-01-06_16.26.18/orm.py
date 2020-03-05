@@ -8,9 +8,12 @@ import logging
 
 import aiomysql
 
+logging.basicConfig(level=logging.INFO,
+                    format='%(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s')
+
 
 def log(sql, args=()):
-    logging.info('SQL: %s' % sql)
+    logging.info('SQL: %s, args:%s' % (sql, args))
 
 
 @asyncio.coroutine
@@ -252,6 +255,16 @@ class Model(dict, metaclass=ModelMetaclass):
             return None
         # 返回第0行_num_列的值, 即行数
         return rs[0]['_num_']
+
+    @classmethod
+    @asyncio.coroutine
+    def findDictinct(cls, selectField):
+        ' find number by select and where. '
+        sql = ['select %s, count(*) num from `%s` group by %s' % (selectField, cls.__table__, selectField)]
+        args = []
+        rs = yield from select(' '.join(sql), args)
+        # 返回所有符合条件的dict对象, 如r=User.findAll(where='admin=1')
+        return [cls(**r) for r in rs]
 
     @classmethod
     @asyncio.coroutine

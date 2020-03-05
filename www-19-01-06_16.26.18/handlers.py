@@ -96,6 +96,7 @@ def index(*, page='1'):
     page_index = get_page_index(page)
     num = yield from Blog.findNumber('count(id)')
     page = Page(num)
+    catagory = yield from Blog.findDictinct('catagory')
     if num == 0:
         blogs = []
     else:
@@ -103,7 +104,28 @@ def index(*, page='1'):
     return {
         '__template__': 'blogs.html',
         'page': page,
-        'blogs': blogs
+        'blogs': blogs,
+        'catagory': catagory
+    }
+
+
+@get('/blog/catagory/{cata}')
+def index_catagory(cata, *, page='1'):
+    logging.info("/blog/catagory/{}".format(cata))
+    page_index = get_page_index(page)
+    num = yield from Blog.findNumber('count(id)', where="catagory='%s'" % cata)
+    logging.info("blog/catagory num:{}".format(num))
+    page = Page(num)
+    catagory = yield from Blog.findDictinct('catagory')
+    if num == 0:
+        blogs = []
+    else:
+        blogs = yield from Blog.findAll(orderBy='created_at desc', where="catagory='%s'" % cata, limit=(page.offset, page.limit))
+    return {
+        '__template__': 'blogs.html',
+        'page': page,
+        'blogs': blogs,
+        'catagory': catagory
     }
 
 
@@ -116,7 +138,8 @@ def get_blog(id):
         # 将评论中的特殊字符转义防止XSS攻击并用<p>封装起来
         c.html_content = text2html(c.content)
     # 将博客内容利用markdown语法转成html
-    blog.html_content = markdown2.markdown(blog.content, extras=["header-ids", "toc", "code-friendly"])
+    blog.html_content = markdown2.markdown(blog.content, extras=[
+                                           "cuddled-lists", "fenced-code-blocks", "header-ids", "metadata", "numbering", "spoiler", "tables", "toc"])
     return {
         '__template__': 'blog.html',
         'blog': blog,
@@ -331,7 +354,7 @@ def api_get_blog(*, id):
 
 
 @post('/api/blogs')
-def api_create_blog(request, *, name, summary, content):
+def api_create_blog(request, *, name, catagory, summary, content):
     '''创建博客'''
     check_admin(request)
     if not name or not name.strip():
@@ -340,14 +363,16 @@ def api_create_blog(request, *, name, summary, content):
         raise APIValueError('summary', 'summary cannot be empty.')
     if not content or not content.strip():
         raise APIValueError('content', 'content cannot be empty.')
+    if not catagory or not content.strip():
+        raise APIValueError('content', 'content cannot be empty.')
     blog = Blog(user_id=request.__user__.id, user_name=request.__user__.name,
-                user_image=request.__user__.image, name=name.strip(), summary=summary.strip(), content=content.strip())
+                user_image=request.__user__.image, name=name.strip(), catagory=catagory.strip(), summary=summary.strip(), content=content.strip())
     yield from blog.save()
     return blog
 
 
 @post('/api/blogs/{id}')
-def api_update_blog(id, request, *, name, summary, content):
+def api_update_blog(id, request, *, name, catagory, summary, content):
     check_admin(request)
     blog = yield from Blog.find(id)
     if not name or not name.strip():
@@ -357,6 +382,7 @@ def api_update_blog(id, request, *, name, summary, content):
     if not content or not content.strip():
         raise APIValueError('content', 'content cannot be empty.')
     blog.name = name.strip()
+    blog.catagory = catagory.strip()
     blog.summary = summary.strip()
     blog.content = content.strip()
     yield from blog.update()

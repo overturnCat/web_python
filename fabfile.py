@@ -1,0 +1,209 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+# vim:fenc=utf-8
+#
+# Copyright © 2018 ayuan <ayuan@ayuan-ubuntu>
+#
+# Distributed under terms of the MIT license.
+
+"""
+
+"""
+import inspect
+import os
+import re
+import sys
+from datetime import datetime
+
+from fabric import Config, Connection
+
+ip = "123.207.61.11"
+remote_user = "ubuntu"
+remote_pass = "ayuandesite123!@"
+remote_su_pass = "ayuandesite123!@"
+
+remote_sql_user = "ayuan"
+remote_sql_pass = "ayuandesql123!@"
+remote_sql_db = "awesome"
+
+local_sql_db = "awesome"
+local_sql_user = "ayuan"
+local_sql_pass = "ayuandesql123!@"
+local_sql_Suser = "ubuntu"
+local_sql_Spass = "ayuandesql123"
+backup_dir = os.path.join(os.path.abspath('.'), 'backup')
+
+tar = "dist.tar.gz"
+remote_tmp_tar = "/tmp/%s" % tar
+remote_wwwroot = '/srv/awesome'
+
+
+def deploy():
+    '''部署www代码'''
+    includes = ['*.py', 'favicon.ico', 'static', 'templates', '*.sql']
+    excludes = ['*test*', '.*', '*.swp']
+    # 配置sudo命令的密码
+    config = Config(overrides={'sudo': {'password': remote_su_pass}})
+    # 以明文方式配置用户登录密码
+    conn = Connection(ip, user=remote_user, config=config, connect_kwargs={
+                      "allow_agent": False, "password": remote_pass})
+    # 压缩www目录中的文件并覆盖dist/dist.tar.gz包
+    cmd = ['cd www', '&&' 'tar', '-czvf', '../dist/%s' % tar]
+    cmd.extend(['--exclude="%s"' % ex for ex in excludes])
+    cmd.extend(includes)
+    conn.local(' '.join(cmd))
+
+    newdir = 'www-%s' % datetime.now().strftime('%y-%m-%d_%H.%M.%S')
+    # run删除远程服务器上的/tmp/dist.tar.gz
+    conn.run('rm -f %s' % remote_tmp_tar)
+    # put把本地的dist-awesome.tar.gz放到远程目录/tmp/dist-awesome.tar.gz
+    conn.put('dist/%s' % tar, remote_tmp_tar)
+    # 创建新目录/srv/awesome/www-year-month-day_hour.minites.seconds
+    conn.sudo("mkdir {}/{}".format(remote_wwwroot, newdir))
+    # 将/tmp/dist-awesome.tar.gz解压到www-year-month-day_hour.minites.seconds
+    conn.sudo("tar -xzvf {} -C {}/{}".format(remote_tmp_tar, remote_wwwroot, newdir))
+    # 更改链接
+    conn.sudo("rm -f {}/www".format(remote_wwwroot))
+    conn.sudo("ln -s {}/{} {}/www".format(remote_wwwroot, newdir, remote_wwwroot))
+    # 改变权限
+    conn.sudo("chown -h www-data:www-data {}/www".format(remote_wwwroot))
+    conn.sudo("chown -H -R www-data:www-data {}/www".format(remote_wwwroot))
+    # 重启awesome服务
+    conn.sudo("supervisorctl stop awesome")
+    conn.sudo("supervisorctl start awesome")
+    conn.sudo("systemctl reload nginx")
+    conn.close()
+
+
+RE_FILES = re.compile("\r?\n")
+
+
+def rollback():
+    '''回滚版本'''
+    # 配置sudo命令的密码
+    config = Config(overrides={'sudo': {'password': remote_su_pass}})
+    # 以明文方式配置用户登录密码
+    conn = Connection(ip, user=remote_user, config=config, connect_kwargs={
+                      "allow_agent": False, "password": remote_pass})
+    with conn.cd(remote_wwwroot):
+        r = conn.run("ls -p -1", hide=True)  # hide禁用服务器将输出复制到中断的行为
+        files = [s[:-1] for s in RE_FILES.split(r.stdout) if s.startswith('www-') and s.endswith('/')]
+        files.sort(reverse=True)
+        r = conn.run('ls -l www', hide=True)
+        ss = r.stdout.split(' -> ')
+        if len(ss) != 2:
+            print('ERROR: \'www\' is not a symbol link.')
+            return
+        current = ss[1].split('/')[-1].strip()
+        print('Found current symbol link points to: %s\n' % current)
+        try:
+            print(files, "*", current, "*")
+            index = files.index(current)
+        except ValueError as e:
+            print('ERROR: symbol link is invalid.')
+            return
+        if len(files) == index + 1:
+            print('ERROR: already the oldest version.')
+            return
+        old = files[index + 1]
+        print('==================================================')
+        for f in files:
+            if f == current:
+                print('      Current ---> %s' % current)
+            elif f == old:
+                print('  Rollback to ---> %s' % old)
+            else:
+                print('                   %s' % f)
+        print('==================================================')
+        print('')
+        yn = input('continue? y/N ')
+        if yn != 'y' and yn != 'Y':
+            print('Rollback cancelled.')
+            return
+        print('Start rollback...')
+    conn.sudo('rm -f {}/www'.format(remote_wwwroot))
+    conn.sudo('ln -s {}/{} {}/www'.format(remote_wwwroot, old, remote_wwwroot))
+    conn.sudo('chown -h www-data:www-data {}/www'.format(remote_wwwroot))
+    conn.sudo('chown -H -R www-data:www-data {}/www'.format(remote_wwwroot))
+    conn.sudo('supervisorctl stop awesome')
+    conn.sudo('supervisorctl start awesome')
+    conn.sudo('/etc/init.d/nginx reload')
+    print('ROLLBACKED OK.')
+
+
+def backup():
+    '''
+    备份数据库
+    '''
+    # 配置sudo命令的密码
+    config = Config(overrides={'sudo': {'password': remote_su_pass}})
+    # 以明文方式配置用户登录密码
+    conn = Connection(ip, user=remote_user, config=config, connect_kwargs={
+                      "allow_agent": False, "password": remote_pass})
+    f = 'backup-%s.sql' % datetime.now().strftime('%y-%m-%d_%H.%M.%S')
+    with conn.cd('/tmp'):
+        conn.run('mysqldump   --user={} --password=\'{}\' --single-transaction --routines --triggers --events  --skip-extended-insert {}>{}'.format(
+            remote_sql_user, remote_sql_pass, remote_sql_db, f))
+        conn.run('tar -czvf %s.tar.gz %s' % (f, f))
+        conn.get('/tmp/%s.tar.gz' % f, 'backup/%s.tar.gz' % f)
+        conn.run('rm -f %s' % f)
+        conn.run('rm -f %s.tar.gz' % f)
+
+
+def restore2local():
+    '''
+    回复数据库到本地
+    '''
+    fs = os.listdir(backup_dir)
+    files = [f for f in fs if f.startswith('backup-') and f.endswith('.sql.tar.gz')]
+    files.sort(reverse=True)
+    if len(files) == 0:
+        print('No backup files found.')
+        return
+    print('Found %s backup files:' % len(files))
+    print('==================================================')
+    n = 0
+    for f in files:
+        print('%s: %s' % (n, f))
+        n = n + 1
+    print('==================================================')
+    try:
+        num = int(input('Restore file: '))
+    except ValueError:
+        print('Invalid file number.')
+        return
+    restore_file = files[num]
+    yn = input('Restore file %s: %s? y/N ' % (num, restore_file))
+    if yn != 'y' and yn != 'Y':
+        print('Restore cancelled.')
+        return
+    print('Start restore to local database...')
+    sqls = [
+        'drop database if exists awesome;',
+        'create database awesome;',
+        'grant select, insert, update, delete on %s.* to \'%s\'@\'localhost\' identified by \'%s\';' % (
+            local_sql_db, local_sql_user, local_sql_pass)
+    ]
+    conn = Connection(ip)
+    for sql in sqls:
+        conn.local(r'mysql -u{} -p{} -e "{}"'.format(local_sql_Suser, local_sql_Spass, sql))
+    conn.local('tar zxvf {1:}/{0:} -C {1:}'.format(restore_file, backup_dir))
+    conn.local(r'mysql -u{} -p{} {} < {}/{}'.format(
+        local_sql_Suser, local_sql_Spass, local_sql_db, backup_dir, restore_file[:-7]))
+    conn.local('rm -f {}/{}'.format(backup_dir, restore_file[:-7]))
+
+
+if __name__ == "__main__":
+    clsmembers = inspect.getmembers(sys.modules[__name__], inspect.isfunction)
+    while(True):
+        print("-----------------------------------------------------------")
+        for i in range(len(clsmembers)):
+            print("{}:{}---->{}".format(i, clsmembers[i][0], inspect.getdoc(clsmembers[i][1])))
+        print("-----------------------------------------------------------")
+        try:
+            sel = int(input("选择其中一项功能(输入序号):"))
+            clsmembers[sel][1]()
+            break
+        except Exception as e:
+            print(e)
+            continue

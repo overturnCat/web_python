@@ -5,15 +5,6 @@
 
 from __future__ import generators
 
-import codecs
-import logging
-import optparse
-import os
-import re
-import sys
-from pprint import pformat, pprint
-from random import randint, random
-
 r"""A fast and complete Python implementation of Markdown.
 
 [from http://daringfireball.net/projects/markdown/]
@@ -98,22 +89,29 @@ __version_info__ = (2, 3, 0)
 __version__ = '.'.join(map(str, __version_info__))
 __author__ = "Trent Mick"
 
+import os
+import sys
+from pprint import pprint, pformat
+import re
+import logging
 try:
     from hashlib import md5
 except ImportError:
     from md5 import md5
+import optparse
+from random import random, randint
+import codecs
 
 
-# ---- Python version compat
+#---- Python version compat
 
 try:
-    from urllib.parse import quote  # python3
+    from urllib.parse import quote # python3
 except ImportError:
-    from urllib import quote  # python2
+    from urllib import quote # python2
 
-if sys.version_info[:2] < (2, 4):
+if sys.version_info[:2] < (2,4):
     from sets import Set as set
-
     def reversed(sequence):
         for i in sequence[::-1]:
             yield i
@@ -132,6 +130,7 @@ elif sys.version_info[0] >= 3:
     base_string_type = str
 
 
+
 #---- globals
 
 DEBUG = False
@@ -141,15 +140,13 @@ DEFAULT_TAB_WIDTH = 4
 
 
 SECRET_SALT = bytes(randint(0, 1000000))
-
-
 def _hash_text(s):
     return 'md5-' + md5(SECRET_SALT + s.encode("utf-8")).hexdigest()
 
-
 # Table of hash values for escaped characters:
 g_escape_table = dict([(ch, _hash_text(ch))
-                       for ch in '\\`*_{}[]()>#+-.!'])
+    for ch in '\\`*_{}[]()>#+-.!'])
+
 
 
 #---- exceptions
@@ -158,7 +155,8 @@ class MarkdownError(Exception):
     pass
 
 
-# ---- public api
+
+#---- public api
 
 def markdown_path(path, encoding="utf-8",
                   html4tags=False, tab_width=DEFAULT_TAB_WIDTH,
@@ -172,7 +170,6 @@ def markdown_path(path, encoding="utf-8",
                     link_patterns=link_patterns,
                     use_file_vars=use_file_vars).convert(text)
 
-
 def markdown(text, html4tags=False, tab_width=DEFAULT_TAB_WIDTH,
              safe_mode=None, extras=None, link_patterns=None,
              use_file_vars=False):
@@ -180,7 +177,6 @@ def markdown(text, html4tags=False, tab_width=DEFAULT_TAB_WIDTH,
                     safe_mode=safe_mode, extras=extras,
                     link_patterns=link_patterns,
                     use_file_vars=use_file_vars).convert(text)
-
 
 class Markdown(object):
     # The dict of "extras" to enable in processing -- a mapping of
@@ -253,7 +249,7 @@ class Markdown(object):
             self.footnotes = {}
             self.footnote_ids = []
         if "header-ids" in self.extras:
-            self._count_from_header_id = {}  # no `defaultdict` in Python 2.4
+            self._count_from_header_id = {} # no `defaultdict` in Python 2.4
         if "metadata" in self.extras:
             self.metadata = {}
 
@@ -275,7 +271,7 @@ class Markdown(object):
         self.reset()
 
         if not isinstance(text, unicode):
-            # TODO: perhaps shouldn't presume UTF-8 for string input?
+            #TODO: perhaps shouldn't presume UTF-8 for string input?
             text = unicode(text, 'utf-8')
 
         if self.use_file_vars:
@@ -397,6 +393,7 @@ class Markdown(object):
 
         return tail
 
+
     _emacs_oneliner_vars_pat = re.compile(r"-\*-\s*([^\r\n]*?)\s*-\*-", re.UNICODE)
     # This regular expression is intended to match blocks like this:
     #    PREFIX Local Variables: SUFFIX
@@ -421,7 +418,7 @@ class Markdown(object):
         http://www.gnu.org/software/emacs/manual/html_node/emacs/Specifying-File-Variables.html#Specifying-File-Variables
         """
         emacs_vars = {}
-        SIZE = pow(2, 13)  # 8kB
+        SIZE = pow(2, 13) # 8kB
 
         # Search near the start for a '-*-'-style one-liner of variables.
         head = text[:SIZE]
@@ -457,7 +454,7 @@ class Markdown(object):
                 prefix = match.group("prefix")
                 suffix = match.group("suffix")
                 lines = match.group("content").splitlines(0)
-                # print "prefix=%r, suffix=%r, content=%r, lines: %s"\
+                #print "prefix=%r, suffix=%r, content=%r, lines: %s"\
                 #      % (prefix, suffix, match.group("content"), lines)
 
                 # Validate the Local Variables block: proper prefix and suffix
@@ -478,11 +475,9 @@ class Markdown(object):
 
                 # Parse out one emacs var per line.
                 continued_for = None
-                for line in lines[:-1]:  # no var on the last line ("PREFIX End:")
-                    if prefix:
-                        line = line[len(prefix):]  # strip prefix
-                    if suffix:
-                        line = line[:-len(suffix)]  # strip suffix
+                for line in lines[:-1]: # no var on the last line ("PREFIX End:")
+                    if prefix: line = line[len(prefix):] # strip prefix
+                    if suffix: line = line[:-len(suffix)] # strip suffix
                     line = line.strip()
                     if continued_for:
                         variable = continued_for
@@ -511,7 +506,7 @@ class Markdown(object):
         # Unquote values.
         for var, val in list(emacs_vars.items()):
             if len(val) > 1 and (val.startswith('"') and val.endswith('"')
-                                 or val.startswith('"') and val.endswith('"')):
+               or val.startswith('"') and val.endswith('"')):
                 emacs_vars[var] = val[1:-1]
 
         return emacs_vars
@@ -519,11 +514,9 @@ class Markdown(object):
     # Cribbed from a post by Bart Lateur:
     # <http://www.nntp.perl.org/group/perl.macperl.anyperl/154>
     _detab_re = re.compile(r'(.*?)\t', re.M)
-
     def _detab_sub(self, match):
         g1 = match.group(1)
         return g1 + (' ' * (self.tab_width - len(g1) % self.tab_width))
-
     def _detab(self, text):
         r"""Remove (leading?) tabs from a file.
 
@@ -561,7 +554,7 @@ class Markdown(object):
             (?=\n+|\Z)          # followed by a newline or end of document
         )
         """ % _block_tags_a,
-                                      re.X | re.M)
+        re.X | re.M)
 
     _block_tags_b = 'p|div|h[1-6]|blockquote|pre|table|dl|ol|ul|script|noscript|form|fieldset|iframe|math'
     _block_tags_b += _html5tags
@@ -577,11 +570,10 @@ class Markdown(object):
             (?=\n+|\Z)          # followed by a newline or end of document
         )
         """ % _block_tags_b,
-                                       re.X | re.M)
+        re.X | re.M)
 
     _html_markdown_attr_re = re.compile(
         r'''\s+markdown=("1"|'1')''')
-
     def _hash_html_block_sub(self, match, raw=False):
         html = match.group(1)
         if raw and self.safe_mode:
@@ -599,8 +591,8 @@ class Markdown(object):
                 l_key = _hash_text(last_line)
                 self.html_blocks[l_key] = last_line
                 return ''.join(["\n\n", f_key,
-                                "\n\n", middle, "\n\n",
-                                l_key, "\n\n"])
+                    "\n\n", middle, "\n\n",
+                    l_key, "\n\n"])
         key = _hash_text(html)
         self.html_blocks[key] = html
         return "\n\n" + key + "\n\n"
@@ -836,7 +828,7 @@ class Markdown(object):
         lines = match.group(0).splitlines(0)
         _dedentlines(lines)
         indent = ' ' * self.tab_width
-        s = ('\n'  # separate from possible cuddled paragraph
+        s = ('\n' # separate from possible cuddled paragraph
              + indent + ('\n'+indent).join(lines)
              + '\n\n')
         return s
@@ -929,13 +921,13 @@ class Markdown(object):
 
     def _wiki_table_sub(self, match):
         ttext = match.group(0).strip()
-        # print 'wiki table: %r' % match.group(0)
+        #print 'wiki table: %r' % match.group(0)
         rows = []
         for line in ttext.splitlines(0):
             line = line.strip()[2:-2].strip()
             row = [c.strip() for c in re.split(r'(?<!\\)\|\|', line)]
             rows.append(row)
-        # pprint(rows)
+        #pprint(rows)
         hlines = ['<table>', '<tbody>']
         for row in rows:
             hrow = ['<tr>']
@@ -1162,7 +1154,7 @@ class Markdown(object):
         anchor_allowed_pos = 0
 
         curr_pos = 0
-        while True:  # Handle the next link.
+        while True: # Handle the next link.
             # The next '[' is the start of:
             # - an inline anchor:   [text](url "title")
             # - a reference anchor: [text][id]
@@ -1226,7 +1218,7 @@ class Markdown(object):
                 return text
 
             # Inline anchor or img?
-            if text[p] == '(':  # attempt at perf improvement
+            if text[p] == '(': # attempt at perf improvement
                 url, title, url_end_idx = self._extract_url_and_title(text, p)
                 if url is not None:
                     # Handle an inline anchor or img.
@@ -1241,8 +1233,8 @@ class Markdown(object):
                     if title:
                         title_str = ' title="%s"' % (
                             _xml_escape_attr(title)
-                            .replace('*', self._escape_table['*'])
-                            .replace('_', self._escape_table['_']))
+                                .replace('*', self._escape_table['*'])
+                                .replace('_', self._escape_table['_']))
                     else:
                         title_str = ''
                     if is_img:
@@ -1357,7 +1349,6 @@ class Markdown(object):
         return header_id
 
     _toc = None
-
     def _toc_add_entry(self, level, id, name):
         if self._toc is None:
             self._toc = []
@@ -1395,7 +1386,7 @@ class Markdown(object):
         header_id_attr = ""
         if "header-ids" in self.extras:
             header_id = self.header_id_from_text(header_group,
-                                                 self.extras["header-ids"], n)
+                self.extras["header-ids"], n)
             if header_id:
                 header_id_attr = ' id="%s"' % header_id
         html = self._run_span_gamut(header_group)
@@ -1422,7 +1413,7 @@ class Markdown(object):
             return self._h_re_tag_friendly.sub(self._h_sub, text)
         return self._h_re.sub(self._h_sub, text)
 
-    _marker_ul_chars = '*+-'
+    _marker_ul_chars  = '*+-'
     _marker_any = r'(?:[%s]|\d+\.)' % _marker_ul_chars
     _marker_ul = '(?:[%s])' % _marker_ul_chars
     _marker_ol = r'(?:\d+\.)'
@@ -1484,7 +1475,7 @@ class Markdown(object):
             start, end = match.span()
             middle = self._list_sub(match)
             text = text[:start] + middle + text[end:]
-            pos = start + len(middle)  # start pos for next attempted match
+            pos = start + len(middle) # start pos for next attempted match
 
         return text
 
@@ -1499,7 +1490,6 @@ class Markdown(object):
         re.M | re.X | re.S)
 
     _last_li_endswith_two_eols = False
-
     def _list_item_sub(self, match):
         item = match.group(4)
         leading_line = match.group(1)
@@ -1601,7 +1591,7 @@ class Markdown(object):
                 formatter_opts = self.extras['code-color'] or {}
 
         if lexer_name:
-            def unhash_code(codeblock):
+            def unhash_code( codeblock ):
                 for key, sanitized in list(self.html_spans.items()):
                     codeblock = codeblock.replace(key, sanitized)
                 replacements = [
@@ -1614,7 +1604,7 @@ class Markdown(object):
                 return codeblock
             lexer = self._get_pygments_lexer(lexer_name)
             if lexer:
-                codeblock = unhash_code(codeblock)
+                codeblock = unhash_code( codeblock )
                 colored = self._color_with_pygments(codeblock, lexer,
                                                     **formatter_opts)
                 return "\n\n%s\n\n" % colored
@@ -1666,7 +1656,7 @@ class Markdown(object):
         ''', re.M | re.X | re.S)
 
     def _fenced_code_block_sub(self, match):
-        return self._code_block_sub(match, is_fenced_code_block=True)
+        return self._code_block_sub(match, is_fenced_code_block=True);
 
     def _do_fenced_code_blocks(self, text):
         """Process ```-fenced unindented code blocks ('fenced-code-blocks' extra)."""
@@ -1743,7 +1733,6 @@ class Markdown(object):
     _em_re = re.compile(r"(\*|_)(?=\S)(.+?)(?<=\S)\1", re.S)
     _code_friendly_strong_re = re.compile(r"\*\*(?=\S)(.+?[*_]*)(?<=\S)\*\*", re.S)
     _code_friendly_em_re = re.compile(r"\*(?=\S)(.+?)(?<=\S)\*", re.S)
-
     def _do_italics_and_bold(self, text):
         # <strong> must go first:
         if "code-friendly" in self.extras:
@@ -1760,14 +1749,13 @@ class Markdown(object):
     # using scare quotes (single quotation marks) is rare.
     _apostrophe_year_re = re.compile(r"'(\d\d)(?=(\s|,|;|\.|\?|!|$))")
     _contractions = ["tis", "twas", "twer", "neath", "o", "n",
-                     "round", "bout", "twixt", "nuff", "fraid", "sup"]
-
+        "round", "bout", "twixt", "nuff", "fraid", "sup"]
     def _do_smart_contractions(self, text):
         text = self._apostrophe_year_re.sub(r"&#8217;\1", text)
         for c in self._contractions:
             text = text.replace("'%s" % c, "&#8217;%s" % c)
             text = text.replace("'%s" % c.capitalize(),
-                                "&#8217;%s" % c.capitalize())
+                "&#8217;%s" % c.capitalize())
         return text
 
     # Substitute double-quotes before single-quotes.
@@ -1775,7 +1763,6 @@ class Markdown(object):
     _opening_double_quote_re = re.compile(r'(?<!\S)"(?=\S)')
     _closing_single_quote_re = re.compile(r"(?<=\S)'")
     _closing_double_quote_re = re.compile(r'(?<=\S)"(?=(\s|,|;|\.|\?|!|$))')
-
     def _do_smart_punctuation(self, text):
         """Fancifies 'single quotes', "double quotes", and apostrophes.
         Converts --, ---, and ... into en dashes, em dashes, and ellipses.
@@ -1786,12 +1773,12 @@ class Markdown(object):
         <http://code.google.com/p/python-markdown2/issues/detail?id=42> for a
         discussion of some diversion from the original SmartyPants.
         """
-        if "'" in text:  # guard for perf
+        if "'" in text: # guard for perf
             text = self._do_smart_contractions(text)
             text = self._opening_single_quote_re.sub("&#8216;", text)
             text = self._closing_single_quote_re.sub("&#8217;", text)
 
-        if '"' in text:  # guard for perf
+        if '"' in text: # guard for perf
             text = self._opening_double_quote_re.sub("&#8220;", text)
             text = self._closing_double_quote_re.sub("&#8221;", text)
 
@@ -1812,10 +1799,9 @@ class Markdown(object):
           )+
         )
         ''', re.M | re.X)
-    _bq_one_level_re = re.compile('^[ \t]*>[ \t]?', re.M)
+    _bq_one_level_re = re.compile('^[ \t]*>[ \t]?', re.M);
 
     _html_pre_block_re = re.compile(r'(\s*<pre>.+?</pre>)', re.S)
-
     def _dedent_two_spaces_sub(self, match):
         return re.sub(r'(?m)^  ', '', match.group(1))
 
@@ -1858,7 +1844,7 @@ class Markdown(object):
                     # consider numeric bullets (e.g. "1." and "2.") to be
                     # equal.
                     if (li and len(li.group(2)) <= 3 and li.group("next_marker")
-                            and li.group("marker")[-1] == li.group("next_marker")[-1]):
+                        and li.group("marker")[-1] == li.group("next_marker")[-1]):
                         start = li.start()
                         cuddled_list = self._do_lists(graf[start:]).rstrip("\n")
                         assert cuddled_list.startswith("<ul>") or cuddled_list.startswith("<ol>")
@@ -1886,9 +1872,9 @@ class Markdown(object):
                 footer.append('<li id="fn-%s">' % id)
                 footer.append(self._run_block_gamut(self.footnotes[id]))
                 backlink = ('<a href="#fnref-%s" '
-                            'class="footnoteBackLink" '
-                            'title="Jump back to footnote %d in the text.">'
-                            '&#8617;</a>' % (id, i+1))
+                    'class="footnoteBackLink" '
+                    'title="Jump back to footnote %d in the text.">'
+                    '&#8617;</a>' % (id, i+1))
                 if footer[-1].endswith("</p>"):
                     footer[-1] = footer[-1][:-len("</p>")] \
                         + '&#160;' + backlink + "</p>"
@@ -1927,7 +1913,6 @@ class Markdown(object):
         return text
 
     _auto_link_re = re.compile(r'<((https?|ftp):[^\'">\s]+)>', re.I)
-
     def _auto_link_sub(self, match):
         g1 = match.group(1)
         return '<a href="%s">%s</a>' % (g1, g1)
@@ -1942,7 +1927,6 @@ class Markdown(object):
           )
           >
         """, re.I | re.X | re.U)
-
     def _auto_email_link_sub(self, match):
         return self._encode_email_address(
             self._unescape_special_chars(match.group(1)))
@@ -1992,7 +1976,7 @@ class Markdown(object):
             for (start, end), href in reversed(replacements):
                 escaped_href = (
                     href.replace('"', '&quot;')  # b/c of attr quote
-                    # To avoid markdown <em> and <strong>:
+                        # To avoid markdown <em> and <strong>:
                         .replace('*', self._escape_table['*'])
                         .replace('_', self._escape_table['_']))
                 link = '<a href="%s">%s</a>' % (escaped_href, text[start:end])
@@ -2029,7 +2013,7 @@ class MarkdownWithExtras(Markdown):
     extras = ["footnotes", "code-color"]
 
 
-# ---- internal support functions
+#---- internal support functions
 
 class UnicodeWithAttrs(unicode):
     """A subclass of unicode used for the return value of conversion to
@@ -2038,7 +2022,6 @@ class UnicodeWithAttrs(unicode):
     """
     metadata = None
     _toc = None
-
     def toc_html(self):
         """Return the HTML for the current TOC.
 
@@ -2073,12 +2056,9 @@ class UnicodeWithAttrs(unicode):
         return '\n'.join(lines) + '\n'
     toc_html = property(toc_html)
 
-
-# {{{ http://code.activestate.com/recipes/577257/ (r1)
+## {{{ http://code.activestate.com/recipes/577257/ (r1)
 _slugify_strip_re = re.compile(r'[^\w\s-]')
 _slugify_hyphenate_re = re.compile(r'[-\s]+')
-
-
 def _slugify(value):
     """
     Normalizes string, converts to lowercase, removes non-alpha characters,
@@ -2090,13 +2070,12 @@ def _slugify(value):
     value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode()
     value = _slugify_strip_re.sub('', value).strip().lower()
     return _slugify_hyphenate_re.sub('-', value)
-# end of http://code.activestate.com/recipes/577257/ }}}
+## end of http://code.activestate.com/recipes/577257/ }}}
 
 
 # From http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/52549
 def _curry(*args, **kwargs):
     function, args = args[0], args[1:]
-
     def result(*rest, **kwrest):
         combined = kwargs.copy()
         combined.update(kwrest)
@@ -2104,8 +2083,6 @@ def _curry(*args, **kwargs):
     return result
 
 # Recipe: regex_from_encoded_pattern (1.0)
-
-
 def _regex_from_encoded_pattern(s):
     """'foo'    -> re.compile(re.escape('foo'))
        '/foo/'  -> re.compile('foo')
@@ -2131,12 +2108,10 @@ def _regex_from_encoded_pattern(s):
                                  "(must be one of '%s')"
                                  % (char, s, ''.join(list(flag_from_char.keys()))))
         return re.compile(s[1:idx], flags)
-    else:  # not an encoded regex
+    else: # not an encoded regex
         return re.compile(re.escape(s))
 
 # Recipe: dedent (0.1.2)
-
-
 def _dedentlines(lines, tabsize=8, skip_first_line=False):
     """_dedentlines(lines, tabsize=8, skip_first_line=False) -> dedented lines
 
@@ -2151,13 +2126,12 @@ def _dedentlines(lines, tabsize=8, skip_first_line=False):
     """
     DEBUG = False
     if DEBUG:
-        print("dedent: dedent(..., tabsize=%d, skip_first_line=%r)"
+        print("dedent: dedent(..., tabsize=%d, skip_first_line=%r)"\
               % (tabsize, skip_first_line))
     indents = []
     margin = None
     for i, line in enumerate(lines):
-        if i == 0 and skip_first_line:
-            continue
+        if i == 0 and skip_first_line: continue
         indent = 0
         for ch in line:
             if ch == ' ':
@@ -2165,24 +2139,21 @@ def _dedentlines(lines, tabsize=8, skip_first_line=False):
             elif ch == '\t':
                 indent += tabsize - (indent % tabsize)
             elif ch in '\r\n':
-                continue  # skip all-whitespace lines
+                continue # skip all-whitespace lines
             else:
                 break
         else:
-            continue  # skip all-whitespace lines
-        if DEBUG:
-            print("dedent: indent=%d: %r" % (indent, line))
+            continue # skip all-whitespace lines
+        if DEBUG: print("dedent: indent=%d: %r" % (indent, line))
         if margin is None:
             margin = indent
         else:
             margin = min(margin, indent)
-    if DEBUG:
-        print("dedent: margin=%r" % margin)
+    if DEBUG: print("dedent: margin=%r" % margin)
 
     if margin is not None and margin > 0:
         for i, line in enumerate(lines):
-            if i == 0 and skip_first_line:
-                continue
+            if i == 0 and skip_first_line: continue
             removed = 0
             for j, ch in enumerate(line):
                 if ch == ' ':
@@ -2190,8 +2161,7 @@ def _dedentlines(lines, tabsize=8, skip_first_line=False):
                 elif ch == '\t':
                     removed += tabsize - (removed % tabsize)
                 elif ch in '\r\n':
-                    if DEBUG:
-                        print("dedent: %r: EOL -> strip up to EOL" % line)
+                    if DEBUG: print("dedent: %r: EOL -> strip up to EOL" % line)
                     lines[i] = lines[i][j:]
                     break
                 else:
@@ -2199,7 +2169,7 @@ def _dedentlines(lines, tabsize=8, skip_first_line=False):
                                      "line %r while removing %d-space margin"
                                      % (ch, line, margin))
                 if DEBUG:
-                    print("dedent: %r: %r -> removed %d/%d"
+                    print("dedent: %r: %r -> removed %d/%d"\
                           % (line, ch, removed, margin))
                 if removed == margin:
                     lines[i] = lines[i][j+1:]
@@ -2211,7 +2181,6 @@ def _dedentlines(lines, tabsize=8, skip_first_line=False):
                 if removed:
                     lines[i] = lines[i][removed:]
     return lines
-
 
 def _dedent(text, tabsize=8, skip_first_line=False):
     """_dedent(text, tabsize=8, skip_first_line=False) -> dedented text
@@ -2230,31 +2199,28 @@ def _dedent(text, tabsize=8, skip_first_line=False):
 
 
 class _memoized(object):
-    """Decorator that caches a function's return value each time it is called.
-    If called later with the same arguments, the cached value is returned, and
-    not re-evaluated.
+   """Decorator that caches a function's return value each time it is called.
+   If called later with the same arguments, the cached value is returned, and
+   not re-evaluated.
 
-    http://wiki.python.org/moin/PythonDecoratorLibrary
-    """
-
-    def __init__(self, func):
-        self.func = func
-        self.cache = {}
-
-    def __call__(self, *args):
-        try:
-            return self.cache[args]
-        except KeyError:
-            self.cache[args] = value = self.func(*args)
-            return value
-        except TypeError:
-            # uncachable -- for instance, passing a list as an argument.
-            # Better to not cache than to blow up entirely.
-            return self.func(*args)
-
-    def __repr__(self):
-        """Return the function's docstring."""
-        return self.func.__doc__
+   http://wiki.python.org/moin/PythonDecoratorLibrary
+   """
+   def __init__(self, func):
+      self.func = func
+      self.cache = {}
+   def __call__(self, *args):
+      try:
+         return self.cache[args]
+      except KeyError:
+         self.cache[args] = value = self.func(*args)
+         return value
+      except TypeError:
+         # uncachable -- for instance, passing a list as an argument.
+         # Better to not cache than to blow up entirely.
+         return self.func(*args)
+   def __repr__(self):
+      """Return the function's docstring."""
+      return self.func.__doc__
 
 
 def _xml_oneliner_re_from_tab_width(tab_width):
@@ -2276,13 +2242,10 @@ def _xml_oneliner_re_from_tab_width(tab_width):
             (?=\n{2,}|\Z)       # followed by a blank line or end of document
         )
         """ % (tab_width - 1), re.X)
-
-
 _xml_oneliner_re_from_tab_width = _memoized(_xml_oneliner_re_from_tab_width)
 
-
 def _hr_tag_re_from_tab_width(tab_width):
-    return re.compile(r"""
+     return re.compile(r"""
         (?:
             (?<=\n\n)       # Starting after a blank line
             |               # or
@@ -2298,8 +2261,6 @@ def _hr_tag_re_from_tab_width(tab_width):
             (?=\n{2,}|\Z)       # followed by a blank line or end of document
         )
         """ % (tab_width - 1), re.X)
-
-
 _hr_tag_re_from_tab_width = _memoized(_hr_tag_re_from_tab_width)
 
 
@@ -2310,10 +2271,10 @@ def _xml_escape_attr(attr, skip_single_quote=True):
     the tag attribute is surrounded by double quotes.
     """
     escaped = (attr
-               .replace('&', '&amp;')
-               .replace('"', '&quot;')
-               .replace('<', '&lt;')
-               .replace('>', '&gt;'))
+        .replace('&', '&amp;')
+        .replace('"', '&quot;')
+        .replace('<', '&lt;')
+        .replace('>', '&gt;'))
     if not skip_single_quote:
         escaped = escaped.replace("'", "&#39;")
     return escaped
@@ -2333,19 +2294,17 @@ def _xml_encode_email_char_at_random(ch):
         return '&#%s;' % ord(ch)
 
 
+
 #---- mainline
 
 class _NoReflowFormatter(optparse.IndentedHelpFormatter):
     """An optparse formatter that does NOT reflow the description."""
-
     def format_description(self, description):
         return description or ""
-
 
 def _test():
     import doctest
     doctest.testmod()
-
 
 def main(argv=None):
     if argv is None:
@@ -2356,8 +2315,8 @@ def main(argv=None):
     usage = "usage: %prog [PATHS...]"
     version = "%prog "+__version__
     parser = optparse.OptionParser(prog="markdown2", usage=usage,
-                                   version=version, description=cmdln_desc,
-                                   formatter=_NoReflowFormatter())
+        version=version, description=cmdln_desc,
+        formatter=_NoReflowFormatter())
     parser.add_option("-v", "--verbose", dest="log_level",
                       action="store_const", const=logging.DEBUG,
                       help="more verbose output")
@@ -2412,10 +2371,8 @@ def main(argv=None):
         f = open(opts.link_patterns_file)
         try:
             for i, line in enumerate(f.readlines()):
-                if not line.strip():
-                    continue
-                if line.lstrip().startswith("#"):
-                    continue
+                if not line.strip(): continue
+                if line.lstrip().startswith("#"): continue
                 try:
                     pat, href = line.rstrip().rsplit(None, 1)
                 except ValueError:
@@ -2454,10 +2411,10 @@ def main(argv=None):
                     sys.stdout.encoding or "utf-8", 'xmlcharrefreplace'))
             print("==== markdown2.py ====")
         html = markdown(text,
-                        html4tags=opts.html4tags,
-                        safe_mode=opts.safe_mode,
-                        extras=extras, link_patterns=link_patterns,
-                        use_file_vars=opts.use_file_vars)
+            html4tags=opts.html4tags,
+            safe_mode=opts.safe_mode,
+            extras=extras, link_patterns=link_patterns,
+            use_file_vars=opts.use_file_vars)
         if py3:
             sys.stdout.write(html)
         else:
@@ -2465,7 +2422,7 @@ def main(argv=None):
                 sys.stdout.encoding or "utf-8", 'xmlcharrefreplace'))
         if extras and "toc" in extras:
             log.debug("toc_html: " +
-                      html.toc_html.encode(sys.stdout.encoding or "utf-8", 'xmlcharrefreplace'))
+                html.toc_html.encode(sys.stdout.encoding or "utf-8", 'xmlcharrefreplace'))
         if opts.compare:
             test_dir = join(dirname(dirname(abspath(__file__))), "test")
             if exists(join(test_dir, "test_markdown2.py")):
@@ -2480,4 +2437,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    sys.exit( main(sys.argv) )
