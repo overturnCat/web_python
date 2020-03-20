@@ -14,13 +14,12 @@ import os
 import time
 from datetime import datetime
 
-from aiohttp import web
-from jinja2 import Environment, FileSystemLoader
-
 import orm
+from aiohttp import web
 from config import configs
 from coroweb import add_routes, add_static
 from handlers import COOKIE_NAME, cookie2user
+from jinja2 import Environment, FileSystemLoader
 
 logging.basicConfig(level=logging.INFO)
 
@@ -161,6 +160,7 @@ def datetime_filter(t):
 
 @asyncio.coroutine
 def init(loop):
+    # 创建sql连接池
     yield from orm.create_pool(loop=loop, **configs.db)
     # middlewares为预处理器，按顺序调用截断函数
     app = web.Application(loop=loop, middlewares=[

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 '''
-Models for user, blog, comment.
+数据库模型, 用类映射数据库的表
 '''
 
 __author__ = 'Michael Liao'

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 __author__ = 'Michael Liao'
+__modify__ = 'ayuan'
 
 import asyncio
 import logging
@@ -36,7 +37,7 @@ def create_pool(loop, **kw):
         minsize=kw.get('minsize', 1),
         # 消息循环
         loop=loop
-    )
+)
 
 
 @asyncio.coroutine
@@ -143,7 +144,26 @@ class TextField(Field):
 
 
 class ModelMetaclass(type):
+    '''
+    1. 排除掉对`Model`类的修改；
+    2. 在当前类（比如`User`）中查找定义的类的所有属性，如果找到一个Field属性，就把它保存到一个`__mappings__`的dict中，同时从类属性中删除该Field属性，否则，容易造成运行时错误（实例的属性会遮盖类的同名属性）；
+    3. 把表名保存到`__table__`中，这里简化为表名默认为类名。
+在`Model`类中，就可以定义各种操作数据库的方法，比如`save()`，`delete()`，`find()`，`update`等等。
 
+    我们实现了`save()`方法，把一个实例保存到数据库中。因为有表名，属性到字段的映射和属性值的集合，就可以构造出`INSERT`语句。
+
+    编写代码试试：
+    u = User(id=12345, name='Michael', email='test@orm.org', password='my-pwd')
+    u.save()
+    输出如下：
+    Found model: User
+    Found mapping: email ==> <StringField:email>
+    Found mapping: password ==> <StringField:password>
+    Found mapping: id ==> <IntegerField:uid>
+    Found mapping: name ==> <StringField:username>
+    SQL: insert into User (password,email,username,id) values (?,?,?,?)
+    ARGS: ['my-pwd', 'test@orm.org', 'Michael', 12345]
+    '''
     def __new__(cls, name, bases, attrs):
         # 跳过Model对象的形成
         if name == 'Model':
